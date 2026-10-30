@@ -101,12 +101,29 @@ fn bearer_authorized(head: &str, expected: Option<&str>) -> bool {
     }
 }
 
+fn truthy(value: &str) -> bool {
+    matches!(value.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes")
+}
+
+// Patch (Pawlowski13/obscura): reverse proxies such as Cloud Run rewrite the
+// Host header to the public domain, which cannot carry the container bind port,
+// so the stock host check rejects every proxied CDP request. Opt in to trusting
+// the proxy authority with OBSCURA_CDP_ALLOW_ANY_HOST=1.
+fn allow_any_host() -> bool {
+    std::env::var("OBSCURA_CDP_ALLOW_ANY_HOST")
+        .map(|value| truthy(&value))
+        .unwrap_or(false)
+}
+
 fn host_matches_bind(
     host_header: &str,
     bind_ip: std::net::IpAddr,
     port: u16,
     forwarded: Option<(std::net::IpAddr, u16)>,
 ) -> bool {
+    if allow_any_host() {
+        return true;
+    }
     let Ok(url) = url::Url::parse(&format!("http://{host_header}/")) else {
         return false;
     };
@@ -2560,6 +2577,15 @@ mod tests {
             &format!("Authorization: Bearer {token}\r\nUpgrade: websocket"),
         );
         assert!(bearer_authorized(&head, Some(token)));
+    }
+
+    #[test]
+    fn allow_any_host_flag_parses_truthy_values() {
+        assert!(truthy("1"));
+        assert!(truthy(" TRUE "));
+        assert!(truthy("yes"));
+        assert!(!truthy("0"));
+        assert!(!truthy(""));
     }
 
     #[test]
