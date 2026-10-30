@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         pkg-config \
         git \
         g++ \
+        clang \
+        libclang-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
